@@ -1,0 +1,357 @@
+<%- include('./layouts/header.ejs')  %>
+
+
+<h2 class="mb-4">Hii, <%= user.name %></h2>
+
+
+<div class="row">
+  <div class="col-md-3">
+    <div class="list-group">
+      <%
+         if(users.length>0){
+           for(let i=0;i<users.length;i++){ %>
+
+<li class="list-group-item list-group-item-dark user-list cursor-pointer " data-reciever_id="<%=users[i]._id%>">
+    <img src="<%=users[i].image %>" width="40px" height="40px" alt=" <%=users[i].name %>">
+    <%=users[i].name %>
+    <%
+    
+    if(users[i].is_online==="1"){
+        %>
+          <sup class=" text-primary" id="<%=users[i]._id%>-status">online</sup>
+        <%
+    }else{
+      %>
+      <sup class=" text-danger" id="<%=users[i]._id%>-status">offline</sup>
+    <%
+    }
+    
+    %>
+</li>
+
+
+
+
+<% }
+   } %>
+    </div>
+  </div>
+  <div class="col-md-9">
+      <div class="start-head">Click to Start the chat</div>
+
+<div class="chat-section">
+    <div id="chat-container">
+      <div class="current-user-chat">
+        <h5></h5>
+     </div>
+      <div class="distance-user-chat">
+        <h5></h5>
+     </div>
+    </div>
+    <form  id="chat-form">
+        <input type="text" name="message" placeholder="enter message" id="message" class="border" required>
+        <input type="submit" value="send" class="btn btn-primary">
+    </form>
+</div>
+
+
+  </div>
+
+</div>
+
+
+
+<!-- delete Modal -->
+<div class="modal fade" id="deleteMessage" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLongTitle">Delete Message</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <form id="delete-chat-form">
+      <div class="modal-body">
+        <input type="text" readonly name="id" id="delete-message-id" style="width: 300px;">
+             <p>are you sure you want to delete below message? </p>
+             <p><b  id="delete-message"></b></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-danger">delete</button>
+      </div>
+    </form>
+
+
+
+    </div>
+  </div>
+</div>
+
+
+
+<!-- update Modal -->
+<div class="modal fade" id="updateMessage" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLongTitle">Update Message</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <form id="update-chat-form">
+      <div class="modal-body">
+        <input type="hidden" name="id" id="update-message-id" style="width: 300px;">
+             <p>are you sure you want to update below message? </p>
+             <input type="text"  name="message" id="update-message" style="width: 300px;">
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-info">update</button>
+      </div>
+    </form>
+
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+<script>
+  const sender_id = '<%=user._id%>';
+  let receiver_id;
+const  socket = io('/user-namespace',{
+  auth:{
+    token:sender_id 
+  }
+})
+
+
+
+  $(()=>{
+       $('.user-list').click(function(){
+        receiver_id = $(this).data("reciever_id");
+      
+           $('.start-head').hide();
+           $('.chat-section').show();
+           socket.emit('existsChat',{sender_id,receiver_id})
+           scrollChats()
+
+       })
+  })
+
+
+  
+         //update user online status
+
+socket.on("getOnlineUser",function(onlineUserId){
+  console.log(onlineUserId)
+   
+   $("#"+onlineUserId+"-status").text("online")
+   $("#"+onlineUserId+"-status").removeClass('text-danger');
+   $("#"+onlineUserId+"-status").addClass('text-primary');
+  
+})
+
+socket.on("getOfflineUser",function(offlineUserId){
+  console.log(offlineUserId)
+
+ $("#"+offlineUserId+"-status").text("offline")
+ $("#"+offlineUserId+"-status").removeClass('text-primary');
+   $("#"+offlineUserId+"-status").addClass('text-danger');
+
+
+})
+
+
+//chat save of user
+
+
+$("#chat-form").submit(function(e){
+   e.preventDefault();
+   let message = $("#message").val();
+
+   fetch("/save-chat",{
+    method:"post",
+    body:JSON.stringify({sender_id,receiver_id,message}),
+    headers:{
+      'Content-Type':"application/json"
+    }
+   }).then(res=>res.json()).then(res=>{
+    if(res.success){
+        $("#message").val("")
+        let chat = res.chat.message;
+        let html = ` <div class="current-user-chat" id="${res.chat._id}">
+         <h5>${chat}
+          <i class="fa fa-trash" data-id="${res.chat._id}" aria-hidden="true" data-toggle="modal" data-target="#deleteMessage"></i>
+          <i class="fa fa-edit" data-id="${res.chat._id}" aria-hidden="true" data-toggle="modal" data-target="#updateMessage"></i>
+          </h5>
+      </div>`;
+      $("#chat-container").append(html)
+      socket.emit('newChat',res.chat)
+      scrollChats()
+       }else{
+         alert(res.msg)
+       }
+   })
+   
+})
+
+
+socket.on("loadnewChat",data=>{
+  let chat = data.message;
+ if(sender_id == data.receiver_id && receiver_id == data.sender_id){
+  let html = ` <div class="distance-user-chat" id="${data._id}">
+         <h5>${chat}</h5>
+      </div>`;
+      $("#chat-container").append(html)
+ }
+ scrollChats()
+
+})
+
+
+
+//load chats
+
+socket.on("loadChats",(chats)=>{
+     $('#chat-container').html('');
+     let html ='';
+     for(let x=0;x<chats.length;x++ ){
+          let addClass ='';
+          if(chats[x].sender_id == sender_id){
+            addClass = 'current-user-chat';
+          }else if(chats[x].receiver_id==receiver_id){
+                 addClass = 'distance-user-chat';
+          }
+
+          html +=`
+              <div class='${addClass}' id="${chats[x]._id}">
+                   <h5>${chats[x].message}
+                    `;
+                    if(chats[x].sender_id == sender_id){
+                      html +=`<i class="fa fa-trash" data-id="${chats[x]._id}" aria-hidden="true" data-toggle="modal" data-target="#deleteMessage"></i>
+                      <i class="fa fa-edit" data-id="${chats[x]._id}" aria-hidden="true" data-toggle="modal" data-target="#updateMessage"></i>
+                      `;
+                    }
+
+                html +=    `</h5>
+                </div>
+          `;
+     }
+
+     $('#chat-container').html(html);
+     scrollChats()
+
+
+})
+
+
+
+function scrollChats(){
+
+const  scrollTop=$('#chat-container').offset().top + $('#chat-container')[0].offsetHeight;
+
+$('#chat-container').scrollTop(scrollTop)
+
+
+
+}
+
+
+$(document).on('click','.fa-trash',function(){
+    let id=$(this).data('id');
+    let msg = $(this).parent().text();
+    $('#delete-message').text(msg);
+    $('#delete-message-id').val(id);
+
+
+})
+
+
+$('#delete-chat-form').submit(function(e){
+  e.preventDefault();
+
+  const id =  $('#delete-message-id').val();
+ fetch('/delete-chat',{
+  method: 'POST',
+  body:JSON.stringify({id}),
+  headers: {
+    'Content-Type': 'application/json'
+    },
+ }).then(res=>res.json()).then((res)=>{
+     if(res.success){
+      $('#'+id).remove();
+            $('#deleteMessage').modal('hide');
+            socket.emit("chatDeleted",id)
+     }else{
+      alert(res.message)
+     }
+ })
+
+})
+
+
+socket.on('deleteChat',id=>{
+  $('#'+id).remove();
+})
+
+
+$(document).on('click','.fa-edit',function(){
+    let id=$(this).data('id');
+    let msg = $(this).parent().text();
+    $('#update-message').val(msg);
+    $('#update-message-id').val(id);
+
+
+})
+
+
+$('#update-chat-form').submit(function(e){
+  e.preventDefault();
+  const message = $('#update-message').val();
+  const id =  $('#update-message-id').val();
+ fetch('/update-chat',{
+  method: 'POST',
+  body:JSON.stringify({id,message}),
+  headers: {
+    'Content-Type': 'application/json'
+    },
+ }).then(res=>res.json()).then((res)=>{
+     if(res.success){
+
+      $('#updateMessage').modal('hide');
+      $('#'+id+" h5").html(`${message}
+          <i class="fa fa-trash" data-id="${res.response._id}" aria-hidden="true" data-toggle="modal" data-target="#deleteMessage"></i>
+          <i class="fa fa-edit" data-id="${res.response._id}" aria-hidden="true" data-toggle="modal" data-target="#updateMessage"></i>
+      `);
+
+
+      socket.emit("chatUpdated",{id,message});
+     }else{
+      alert(res.message)
+     } 
+ })
+
+})
+
+
+
+socket.on("updateChat",({id,message})=>{
+  $('#'+id+" h5").html(`${message}`);
+})
+
+</script>
+
+
+
+<%- include('./layouts/footer.ejs')  %>
+
